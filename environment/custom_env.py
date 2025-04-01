@@ -125,20 +125,147 @@ class ChessEnv(gym.Env):
         
         # Piece development and king safety
         development = self._evaluate_development()
-        reward += development * 0.1
+        reward += development * 0.15  # Increased weight for development
+        
+        # Variety of piece movement (encourage using all pieces)
+        piece_variety = self._evaluate_piece_variety()
+        reward += piece_variety * 0.15  # New reward component
         
         # Check rewards (immediate tactical advantage)
         if self.board.is_check():
             reward += 0.5
         
-        # Mobility (number of legal moves)
-        mobility = len(list(self.board.legal_moves)) / 30.0  # Normalize
-        reward += mobility * 0.1
+        # Pawn structure reward
+        pawn_structure = self._evaluate_pawn_structure()
+        reward += pawn_structure * 0.1  # New reward component
+        
+        # Penalize repeated moves
+        repetition_penalty = self._evaluate_move_repetition()
+        reward -= repetition_penalty * 0.2
         
         # Small reward for game progression to encourage finishing games
         reward += 0.01
         
         return reward
+
+    def _evaluate_piece_variety(self):
+        """
+        Reward for moving a variety of pieces rather than the same piece repeatedly.
+        Tracks which pieces have been moved and rewards accordingly.
+        """
+        # Initialize piece movement tracking on first call
+        if not hasattr(self, 'piece_movement_tracker'):
+            self.piece_movement_tracker = {}
+            for square in chess.SQUARES:
+                piece = self.board.piece_at(square)
+                if piece:
+                    self.piece_movement_tracker[square] = 0
+        
+        # Update tracker based on the last move
+        if self.board.move_stack:
+            last_move = self.board.move_stack[-1]
+            from_square = last_move.from_square
+            
+            # Increment the counter for this piece's square
+            if from_square in self.piece_movement_tracker:
+                self.piece_movement_tracker[from_square] += 1
+        
+        # Calculate variety score based on the distribution of moves
+        total_moves = sum(self.piece_movement_tracker.values())
+        if total_moves == 0:
+            return 0
+        
+        # Count how many different pieces have been moved
+        moved_pieces = sum(1 for count in self.piece_movement_tracker.values() if count > 0)
+        max_possible = len(self.piece_movement_tracker)
+        
+        # Encourage moving more unique pieces
+        variety_score = moved_pieces / max(1, max_possible)
+        
+        # Penalize if a few pieces are moved many more times than others
+        if moved_pieces > 0:
+            avg_moves = total_moves / moved_pieces
+            max_moves = max(self.piece_movement_tracker.values())
+            if max_moves > avg_moves * 2:  # One piece moved much more than others
+                variety_score *= 0.7  # Reduce the score
+        
+        return variety_score
+
+    def _evaluate_move_repetition(self):
+        """
+        Penalize repetitive moves (like moving the same piece back and forth).
+        """
+        # Need at least 4 moves to detect a repetition
+        if len(self.board.move_stack) < 4:
+            return 0
+        
+        # Check last 4 moves for a pattern like A->B->A->B
+        moves = self.board.move_stack[-4:]
+        if (moves[0].from_square == moves[2].from_square and 
+            moves[0].to_square == moves[2].to_square and
+            moves[1].from_square == moves[3].from_square and
+            moves[1].to_square == moves[3].to_square):
+            return 1  # Found a repetitive pattern
+        
+        # Check for a single piece being moved repeatedly
+        last_piece_moves = {}
+        for move in self.board.move_stack[-8:]:  # Look at last 8 moves
+            from_square = move.from_square
+            if from_square not in last_piece_moves:
+                last_piece_moves[from_square] = 1
+            else:
+                last_piece_moves[from_square] += 1
+        
+        # If any piece has been moved more than 3 times in the last 8 moves, penalize
+        max_moves = max(last_piece_moves.values()) if last_piece_moves else 0
+        if max_moves > 3:
+            return 0.5
+        
+        return 0
+
+    def _evaluate_pawn_structure(self):
+        """
+        Evaluate the pawn structure - isolated pawns, doubled pawns, etc.
+        """
+        # Get all pawns for the agent's color
+        pawn_type = chess.PAWN
+        color = chess.WHITE if self.play_as_white else chess.BLACK
+        pawn_squares = [s for s in chess.SQUARES if 
+                       self.board.piece_at(s) is not None and 
+                       self.board.piece_at(s).piece_type == pawn_type and
+                       self.board.piece_at(s).color == color]
+        
+        if not pawn_squares:
+            return 0
+        
+        score = 0
+        
+        # Reward for pawn chain (adjacent pawns protecting each other)
+        files = [chess.square_file(s) for s in pawn_squares]
+        ranks = [chess.square_rank(s) for s in pawn_squares]
+        
+        # Count doubled pawns (negative)
+        doubled_count = len(files) - len(set(files))
+        score -= doubled_count * 0.1
+        
+        # Check for isolated pawns (no friendly pawns on adjacent files)
+        isolated_count = 0
+        for pawn in pawn_squares:
+            f = chess.square_file(pawn)
+            if (f-1 not in files) and (f+1 not in files):
+                isolated_count += 1
+        
+        score -= isolated_count * 0.1
+        
+        # Center pawns are good (e4, d4, e5, d5)
+        center_files = [3, 4]  # d and e files
+        center_ranks = [3, 4]  # 4th and 5th ranks
+        center_pawn_count = sum(1 for f, r in zip(files, ranks) 
+                               if f in center_files and r in center_ranks)
+        score += center_pawn_count * 0.15
+        
+        # Normalize
+        return score / len(pawn_squares)
 
     def _calculate_material_advantage(self):
         """Calculate material advantage using standard piece values."""

@@ -4,18 +4,16 @@ import numpy as np
 import imageio
 from stable_baselines3 import DQN, PPO
 from environment.custom_env import ChessEnv
-from training.dqn_training import train_dqn
-from training.pg_training import train_ppo
-from training.mistake_learning import ChessMistakeTracker, ChessSelfPlayTrainer
+from training.mistake_learning import ChessSelfPlayTrainer
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Chess RL Project')
-    parser.add_argument('--train', choices=['dqn', 'ppo', 'both', 'none'], default='none',
-                        help='Which algorithm to train')
+    parser.add_argument('--train', action='store_true',
+                        help='Train the chess model with human-like techniques')
+    parser.add_argument('--model_type', choices=['dqn', 'ppo'], default='dqn',
+                        help='Which model type to use (DQN or PPO)')
     parser.add_argument('--play', action='store_true',
-                        help='Play a game with a trained agent')
-    parser.add_argument('--model', choices=['dqn', 'ppo', 'both'], default='dqn',
-                        help='Which model to use for playing')
+                        help='Play a game with the trained model')
     parser.add_argument('--record', action='store_true',
                         help='Record a video of the gameplay')
     parser.add_argument('--stockfish', action='store_true',
@@ -24,10 +22,12 @@ def parse_args():
                         help='Stockfish ELO rating (approximate difficulty)')
     parser.add_argument('--episodes', type=int, default=1,
                         help='Number of episodes to play/record')
-    parser.add_argument('--compare', action='store_true',
-                        help='Compare both models in a video')
-    parser.add_argument('--advanced_training', action='store_true',
-                        help='Use advanced training with mistake learning and self-play')
+    parser.add_argument('--timesteps', type=int, default=100000,
+                        help='Number of timesteps to train for')
+    parser.add_argument('--versions', type=int, default=5,
+                        help='Number of model versions to train')
+    parser.add_argument('--overnight', action='store_true',
+                        help='Run extended overnight training session')
     return parser.parse_args()
 
 def record_video(env, model, video_path="videos/chess_gameplay.mp4", num_episodes=1, stockfish=False, stockfish_elo=1500):
@@ -105,140 +105,135 @@ def record_video(env, model, video_path="videos/chess_gameplay.mp4", num_episode
     
     return wins, draws, losses
 
-def compare_models_video(env, dqn_model, ppo_model, video_path="videos/model_comparison.mp4", 
-                        num_episodes=1, stockfish=False, stockfish_elo=1500):
+def overnight_training(model_class, model_path, hours=8, versions=20, timesteps_per_version=20000):
     """
-    Create a side-by-side comparison video of DQN and PPO models
+    Run extended overnight training
+    
+    Args:
+        model_class: The model class to use (DQN or PPO)
+        model_path: Path to save models
+        hours: Number of hours to train
+        versions: Maximum number of versions to create
+        timesteps_per_version: Timesteps per version
     """
-    os.makedirs(os.path.dirname(video_path), exist_ok=True)
+    import time
     
-    dqn_frames = []
-    ppo_frames = []
+    print(f"Starting overnight training for approximately {hours} hours")
     
-    # Record DQN games
-    print("Recording DQN model gameplay...")
-    for episode in range(num_episodes):
-        obs, _ = env.reset(options={'stockfish': stockfish, 'stockfish_elo': stockfish_elo})
-        done = False
-        
-        while not done:
-            frame = env.render(mode='rgb_array')
-            if frame is not None:
-                dqn_frames.append(frame)
+    # Create environment
+    env = ChessEnv()
+    
+    # Configure with smaller buffer to avoid memory issues
+    trainer = ChessSelfPlayTrainer(
+        env=env,
+        model_class=model_class,
+        model_path=model_path,
+        version_history=5  # Keep last 5 versions for self-play
+    )
+    
+    start_time = time.time()
+    end_time = start_time + (hours * 3600)  # Convert hours to seconds
+    
+    # Train for specified number of versions or until time runs out
+    for version in range(versions):
+        current_time = time.time()
+        if current_time >= end_time:
+            print(f"Training time limit of {hours} hours reached after {version} versions")
+            break
             
-            action, _ = dqn_model.predict(obs, deterministic=True)
-            obs, reward, done, _, _ = env.step(action)
-    
-    # Record PPO games
-    print("Recording PPO model gameplay...")
-    for episode in range(num_episodes):
-        obs, _ = env.reset(options={'stockfish': stockfish, 'stockfish_elo': stockfish_elo})
-        done = False
+        # Calculate remaining time
+        time_elapsed = (current_time - start_time) / 3600  # in hours
+        time_remaining = hours - time_elapsed
         
-        while not done:
-            frame = env.render(mode='rgb_array')
-            if frame is not None:
-                ppo_frames.append(frame)
-            
-            action, _ = ppo_model.predict(obs, deterministic=True)
-            obs, reward, done, _, _ = env.step(action)
-    
-    # Create side-by-side frames
-    combined_frames = []
-    max_frames = min(len(dqn_frames), len(ppo_frames))
-    
-    for i in range(max_frames):
-        # Get frames from each model (or use last frame if one is shorter)
-        dqn_frame = dqn_frames[min(i, len(dqn_frames)-1)]
-        ppo_frame = ppo_frames[min(i, len(ppo_frames)-1)]
+        print(f"Starting version {version+1}/{versions}")
+        print(f"Time elapsed: {time_elapsed:.2f} hours, remaining: {time_remaining:.2f} hours")
         
-        # Create a side-by-side image
-        h, w = dqn_frame.shape[0], dqn_frame.shape[1]
-        combined = np.zeros((h, w*2, 3), dtype=np.uint8)
-        combined[:, :w] = dqn_frame
-        combined[:, w:] = ppo_frame
-        
-        # Add labels
-        # (Note: This is a simple approach - for better text, use PIL or OpenCV)
-        combined_frames.append(combined)
+        # Train this version with human-like learning
+        try:
+            # Reduce timesteps if we're running out of time
+            if time_remaining < 1 and versions - version > 1:
+                adjusted_timesteps = int(timesteps_per_version * (time_remaining / (versions - version)))
+                print(f"Time running low, reducing timesteps to {adjusted_timesteps}")
+                trainer.train_human_like(timesteps=adjusted_timesteps, versions=1)
+            else:
+                trainer.train_human_like(timesteps=timesteps_per_version, versions=1)
+                
+        except Exception as e:
+            print(f"Error during training version {version+1}: {e}")
+            continue
     
-    print(f"Saving comparison video to {video_path}")
-    imageio.mimsave(video_path, combined_frames, fps=3)
-    print(f"Comparison video saved to {video_path}")
+    # Calculate and print final stats
+    total_time = (time.time() - start_time) / 3600
+    print(f"Training completed after {total_time:.2f} hours")
+    print(f"Trained {trainer.current_version} versions")
+    
+    # Save a final copy to the standard path for compatibility
+    standard_path = model_path.replace("human_like", "chess_dqn" if model_class == DQN else "ppo_chess")
+    final_model = model_class.load(f"{model_path}/v{trainer.current_version}.zip")
+    final_model.save(standard_path)
+    print(f"Saved final model to standard path: {standard_path}")
 
 def main():
     args = parse_args()
     
-    # Training with advanced techniques
-    if args.train in ['dqn', 'both'] and args.advanced_training:
-        print("Training DQN model with advanced techniques...")
-        
-        # Create the base environment (not vectorized yet)
-        env = ChessEnv()
-        
-        # The ChessSelfPlayTrainer will vectorize it internally
-        trainer = ChessSelfPlayTrainer(env, model_class=DQN, model_path="models/dqn/versions")
-        trainer.train(timesteps=100000, versions=5)
-    elif args.train in ['dqn', 'both']:
-        print("Training DQN model...")
-        train_dqn()
+    # Select the appropriate model class based on user preference
+    model_class = DQN if args.model_type == 'dqn' else PPO
+    model_type_name = args.model_type.upper()
     
-    if args.train in ['ppo', 'both'] and args.advanced_training:
-        print("Training PPO model with advanced techniques...")
-        env = ChessEnv()
-        trainer = ChessSelfPlayTrainer(env, model_class=PPO, model_path="models/pg/versions")
-        trainer.train(timesteps=100000, versions=5)
-    elif args.train in ['ppo', 'both']:
-        print("Training PPO model...")
-        train_ppo()
+    # Set up paths for the model
+    model_dir = "models/dqn" if args.model_type == 'dqn' else "models/pg"
+    human_like_path = f"{model_dir}/human_like"
+    standard_path = f"{model_dir}/chess_dqn" if args.model_type == 'dqn' else f"{model_dir}/ppo_chess"
+    
+    # Make sure model directories exist
+    os.makedirs(model_dir, exist_ok=True)
+    os.makedirs(human_like_path, exist_ok=True)
+    os.makedirs("videos", exist_ok=True)
+    
+    # Training with human-like techniques
+    if args.train:
+        if args.overnight:
+            # Extended overnight training
+            overnight_training(
+                model_class=model_class,
+                model_path=human_like_path,
+                hours=8,
+                versions=args.versions,
+                timesteps_per_version=args.timesteps
+            )
+        else:
+            print(f"Training {model_type_name} model with human-like techniques...")
+            
+            # Create the base environment
+            env = ChessEnv()
+            
+            # Use the human-like training method
+            trainer = ChessSelfPlayTrainer(env, model_class=model_class, model_path=human_like_path)
+            trainer.train_human_like(timesteps=args.timesteps, versions=args.versions)
+            
+            # Save a final copy to the standard path for compatibility
+            final_model = model_class.load(f"{trainer.model_path}/v{trainer.current_version}.zip")
+            final_model.save(standard_path)
+            print(f"Saved final human-like {model_type_name} model to standard path: {standard_path}")
     
     # Playing or recording
-    if args.play or args.record or args.compare:
-        # Load models
-        dqn_model = None
-        ppo_model = None
-        
-        # Load DQN if needed
-        if args.model in ['dqn', 'both']:
-            dqn_path = "models/dqn/chess_dqn"
-            if os.path.exists(dqn_path + ".zip"):
-                dqn_model = DQN.load(dqn_path)
-                print(f"Loaded DQN model from {dqn_path}")
-            else:
-                print(f"DQN model not found at {dqn_path}")
-                if args.model == 'dqn':
-                    return
-        
-        # Load PPO if needed
-        if args.model in ['ppo', 'both']:
-            ppo_path = "models/pg/ppo_chess"
-            if os.path.exists(ppo_path + ".zip"):
-                ppo_model = PPO.load(ppo_path)
-                print(f"Loaded PPO model from {ppo_path}")
-            else:
-                print(f"PPO model not found at {ppo_path}")
-                if args.model == 'ppo':
-                    return
-        
-        # Initialize environment
-        env = ChessEnv(render_mode='rgb_array' if args.record or args.compare else 'human')
-        
-        # Compare models
-        if args.compare and dqn_model and ppo_model:
-            compare_models_video(env, dqn_model, ppo_model, 
-                               stockfish=args.stockfish, 
-                               stockfish_elo=args.stockfish_elo,
-                               num_episodes=args.episodes)
+    if args.play or args.record:
+        # Load the model
+        model_path = standard_path
+        if os.path.exists(model_path + ".zip"):
+            model = model_class.load(model_path)
+            print(f"Loaded {model_type_name} model from {model_path}")
+        else:
+            print(f"{model_type_name} model not found at {model_path}")
             return
         
-        # Select appropriate model
-        model = dqn_model if args.model == 'dqn' else ppo_model
+        # Initialize environment
+        env = ChessEnv(render_mode='rgb_array' if args.record else 'human')
         
         if args.record:
             # Record video
-            model_name = args.model
             opponent = "stockfish" if args.stockfish else "self"
-            video_path = f"videos/{model_name}_vs_{opponent}.mp4"
+            video_path = f"videos/{args.model_type}_vs_{opponent}.mp4"
             record_video(env, model, video_path, args.episodes, 
                        stockfish=args.stockfish, 
                        stockfish_elo=args.stockfish_elo)
