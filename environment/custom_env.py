@@ -96,17 +96,146 @@ class ChessEnv(gym.Env):
             return legal_moves[0] if legal_moves else None
     
     def _get_reward(self):
-        # Reward function based on the game state
+        """
+        Enhanced reward function for chess-playing agent.
+        Provides more chess-specific feedback to guide learning.
+        """
+        # Terminal states with high rewards/penalties
         if self.board.is_checkmate():
-            # Check who won the game
             return 100 if self.board.outcome().winner == self.play_as_white else -100
-        elif self.board.is_stalemate() or self.board.is_insufficient_material():
-            return 0  # Draw
-        elif self.board.is_check():
-            return 1  # Small reward for putting opponent in check
-        else:
-            # Evaluate board position for more sophisticated reward
-            return 0.01  # Small positive reward for each step
+        
+        if self.board.is_stalemate():
+            # Stalemate is better than losing but worse than winning
+            return -10 if self.board.turn == self.play_as_white else 10
+        
+        if self.board.is_insufficient_material():
+            # Draw by insufficient material
+            return 0
+        
+        # Non-terminal rewards based on chess principles
+        reward = 0.0
+        
+        # Material advantage (most important chess metric)
+        material_value = self._calculate_material_advantage()
+        reward += material_value * 0.3  # Scale material advantage
+        
+        # Center control reward
+        center_control = self._evaluate_center_control()
+        reward += center_control * 0.2
+        
+        # Piece development and king safety
+        development = self._evaluate_development()
+        reward += development * 0.1
+        
+        # Check rewards (immediate tactical advantage)
+        if self.board.is_check():
+            reward += 0.5
+        
+        # Mobility (number of legal moves)
+        mobility = len(list(self.board.legal_moves)) / 30.0  # Normalize
+        reward += mobility * 0.1
+        
+        # Small reward for game progression to encourage finishing games
+        reward += 0.01
+        
+        return reward
+
+    def _calculate_material_advantage(self):
+        """Calculate material advantage using standard piece values."""
+        piece_values = {
+            'p': 1, 'n': 3, 'b': 3, 'r': 5, 'q': 9, 'k': 0,
+            'P': 1, 'N': 3, 'B': 3, 'R': 5, 'Q': 9, 'K': 0
+        }
+        
+        material_balance = 0
+        
+        for square in chess.SQUARES:
+            piece = self.board.piece_at(square)
+            if piece:
+                value = piece_values[piece.symbol()]
+                # Add value if it's the agent's piece, subtract if opponent's
+                material_balance += value if piece.color == self.play_as_white else -value
+        
+        return material_balance / 39.0  # Normalize by total material value
+
+    def _evaluate_center_control(self):
+        """Evaluate control of the center of the board."""
+        center_squares = [chess.E4, chess.D4, chess.E5, chess.D5]
+        center_control = 0
+        
+        # Piece in center
+        for square in center_squares:
+            piece = self.board.piece_at(square)
+            if piece:
+                center_control += 0.5 if piece.color == self.play_as_white else -0.5
+        
+        # Attacks on center
+        for square in center_squares:
+            if self.board.is_attacked_by(self.play_as_white, square):
+                center_control += 0.25
+            if self.board.is_attacked_by(not self.play_as_white, square):
+                center_control -= 0.25
+        
+        return center_control / 4.0  # Normalize
+
+    def _evaluate_development(self):
+        """Evaluate piece development and king safety."""
+        development = 0
+        
+        # Check if knights and bishops are moved from starting positions
+        start_minor_pieces = [chess.B1, chess.G1, chess.C1, chess.F1] if self.play_as_white else [chess.B8, chess.G8, chess.C8, chess.F8]
+        
+        for square in start_minor_pieces:
+            piece = self.board.piece_at(square)
+            piece_type = None if piece is None else piece.piece_type
+            piece_color = None if piece is None else piece.color
+            
+            expected_color = self.play_as_white
+            expected_types = [chess.KNIGHT, chess.BISHOP]
+            
+            # If piece is not there or it's not the original piece, development has occurred
+            if piece is None or piece_color != expected_color or piece_type not in expected_types:
+                development += 0.25
+        
+        # Castle bonus (major development goal)
+        if self._has_castled(self.play_as_white):
+            development += 1.0
+        
+        # Penalty for unsafe king
+        if self._king_in_danger(self.play_as_white):
+            development -= 1.0
+        
+        return development / 3.0  # Normalize
+
+    def _has_castled(self, color):
+        """Check if a player has castled."""
+        # Check king position
+        king_square = self.board.king(color)
+        start_square = chess.E1 if color else chess.E8
+        
+        # If king has moved and it's not on starting square, check if it's on a typical castling square
+        if king_square != start_square:
+            if king_square in [chess.G1, chess.C1] if color else king_square in [chess.G8, chess.C8]:
+                return True
+        return False
+
+    def _king_in_danger(self, color):
+        """Check if the king is in danger (attacks nearby)."""
+        king_square = self.board.king(color)
+        if king_square is None:
+            return True  # No king is definitely dangerous
+        
+        # Check if squares around king are attacked
+        king_danger = 0
+        rank, file = chess.square_rank(king_square), chess.square_file(king_square)
+        
+        for r in range(max(0, rank-1), min(8, rank+2)):
+            for f in range(max(0, file-1), min(8, file+2)):
+                square = chess.square(f, r)
+                if self.board.is_attacked_by(not color, square):
+                    king_danger += 1
+        
+        return king_danger >= 3  # If 3 or more squares around king are attacked
     
     def _get_info(self):
         """Get additional information about the current game state"""
@@ -182,11 +311,30 @@ class ChessEnv(gym.Env):
             ax.set_yticks([])
             ax.axis('off')
             
-            # Convert to RGB array
+            # Convert to RGB array - fixed method
             fig.canvas.draw()
-            img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-            img = img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
             
+            # Get the RGBA buffer from the figure
+            w, h = fig.canvas.get_width_height()
+            
+            # Try different methods based on what's available
+            try:
+                # Modern matplotlib
+                buf = fig.canvas.buffer_rgba()
+                img = np.asarray(buf)
+            except AttributeError:
+                try:
+                    # Alternative method
+                    buf = fig.canvas.tostring_argb()
+                    img = np.frombuffer(buf, dtype=np.uint8).reshape(h, w, 4)
+                    # Convert ARGB to RGB
+                    img = img[:, :, 1:] 
+                except AttributeError:
+                    # Last resort
+                    from PIL import Image
+                    canvas = fig.canvas
+                    img = np.array(Image.frombytes('RGB', (w, h), canvas.tostring_rgb()))
+                    
             plt.close(fig)
             return img
     

@@ -6,6 +6,7 @@ from stable_baselines3 import DQN, PPO
 from environment.custom_env import ChessEnv
 from training.dqn_training import train_dqn
 from training.pg_training import train_ppo
+from training.mistake_learning import ChessMistakeTracker, ChessSelfPlayTrainer
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Chess RL Project')
@@ -25,6 +26,8 @@ def parse_args():
                         help='Number of episodes to play/record')
     parser.add_argument('--compare', action='store_true',
                         help='Compare both models in a video')
+    parser.add_argument('--advanced_training', action='store_true',
+                        help='Use advanced training with mistake learning and self-play')
     return parser.parse_args()
 
 def record_video(env, model, video_path="videos/chess_gameplay.mp4", num_episodes=1, stockfish=False, stockfish_elo=1500):
@@ -166,12 +169,26 @@ def compare_models_video(env, dqn_model, ppo_model, video_path="videos/model_com
 def main():
     args = parse_args()
     
-    # Training
-    if args.train in ['dqn', 'both']:
+    # Training with advanced techniques
+    if args.train in ['dqn', 'both'] and args.advanced_training:
+        print("Training DQN model with advanced techniques...")
+        
+        # Create the base environment (not vectorized yet)
+        env = ChessEnv()
+        
+        # The ChessSelfPlayTrainer will vectorize it internally
+        trainer = ChessSelfPlayTrainer(env, model_class=DQN, model_path="models/dqn/versions")
+        trainer.train(timesteps=100000, versions=5)
+    elif args.train in ['dqn', 'both']:
         print("Training DQN model...")
         train_dqn()
     
-    if args.train in ['ppo', 'both']:
+    if args.train in ['ppo', 'both'] and args.advanced_training:
+        print("Training PPO model with advanced techniques...")
+        env = ChessEnv()
+        trainer = ChessSelfPlayTrainer(env, model_class=PPO, model_path="models/pg/versions")
+        trainer.train(timesteps=100000, versions=5)
+    elif args.train in ['ppo', 'both']:
         print("Training PPO model...")
         train_ppo()
     
