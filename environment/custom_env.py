@@ -123,13 +123,13 @@ class ChessEnv(gym.Env):
         center_control = self._evaluate_center_control()
         reward += center_control * 0.2
         
-        # Piece development and king safety
-        development = self._evaluate_development()
-        reward += development * 0.15  # Increased weight for development
-        
-        # Variety of piece movement (encourage using all pieces)
+        # CRITICAL CHANGE: Piece variety reward - dramatically increased weight
         piece_variety = self._evaluate_piece_variety()
-        reward += piece_variety * 0.15  # New reward component
+        reward += piece_variety * 0.5  # Increased from 0.15 to 0.5
+        
+        # Development and king safety - decreased slightly
+        development = self._evaluate_development()
+        reward += development * 0.1  # Decreased from 0.15
         
         # Check rewards (immediate tactical advantage)
         if self.board.is_check():
@@ -137,11 +137,11 @@ class ChessEnv(gym.Env):
         
         # Pawn structure reward
         pawn_structure = self._evaluate_pawn_structure()
-        reward += pawn_structure * 0.1  # New reward component
+        reward += pawn_structure * 0.1
         
-        # Penalize repeated moves
+        # CRITICAL CHANGE: Much stronger penalty for repeated moves
         repetition_penalty = self._evaluate_move_repetition()
-        reward -= repetition_penalty * 0.2
+        reward -= repetition_penalty * 1.0  # Increased from 0.2 to 1.0
         
         # Small reward for game progression to encourage finishing games
         reward += 0.01
@@ -177,17 +177,22 @@ class ChessEnv(gym.Env):
         
         # Count how many different pieces have been moved
         moved_pieces = sum(1 for count in self.piece_movement_tracker.values() if count > 0)
-        max_possible = len(self.piece_movement_tracker)
+        max_possible = len([sq for sq in self.piece_movement_tracker if self.board.piece_at(sq) is not None])
+        max_possible = max(1, max_possible)  # Avoid division by zero
         
-        # Encourage moving more unique pieces
-        variety_score = moved_pieces / max(1, max_possible)
+        # CRITICAL CHANGE: Higher reward for piece variety
+        variety_score = (moved_pieces / max_possible) * 2.0  # Multiplied by 2.0 to emphasize
         
-        # Penalize if a few pieces are moved many more times than others
+        # CRITICAL CHANGE: Stronger penalty for moving the same piece repeatedly
         if moved_pieces > 0:
             avg_moves = total_moves / moved_pieces
             max_moves = max(self.piece_movement_tracker.values())
-            if max_moves > avg_moves * 2:  # One piece moved much more than others
-                variety_score *= 0.7  # Reduce the score
+            if max_moves > avg_moves * 1.5:  # Reduced threshold from 2 to 1.5
+                variety_score *= 0.5  # Increased penalty from 0.7 to 0.5
+            
+            # CRITICAL ADDITION: Add penalty for the most-moved piece being moved too much
+            if max_moves > 3 and total_moves > 5:
+                variety_score -= 0.3  # Direct penalty for excessive use of one piece
         
         return variety_score
 
@@ -205,21 +210,25 @@ class ChessEnv(gym.Env):
             moves[0].to_square == moves[2].to_square and
             moves[1].from_square == moves[3].from_square and
             moves[1].to_square == moves[3].to_square):
-            return 1  # Found a repetitive pattern
+            return 2.0  # Increased from 1.0 to 2.0 - Found a repetitive pattern
         
         # Check for a single piece being moved repeatedly
         last_piece_moves = {}
-        for move in self.board.move_stack[-8:]:  # Look at last 8 moves
+        for move in self.board.move_stack[-6:]:  # Reduced from 8 to 6 moves
             from_square = move.from_square
             if from_square not in last_piece_moves:
                 last_piece_moves[from_square] = 1
             else:
                 last_piece_moves[from_square] += 1
         
-        # If any piece has been moved more than 3 times in the last 8 moves, penalize
+        # CRITICAL CHANGE: More strict rules for repetitive moves
         max_moves = max(last_piece_moves.values()) if last_piece_moves else 0
-        if max_moves > 3:
-            return 0.5
+        
+        # If any piece has been moved 3+ times in the last 6 moves, strongly penalize
+        if max_moves >= 3:
+            return 1.5  # Increased penalty
+        elif max_moves == 2:
+            return 0.5  # Small penalty for minor repetition
         
         return 0
 

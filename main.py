@@ -90,6 +90,8 @@ def record_video(env, model, video_path="videos/chess_gameplay.mp4", num_episode
 
 def overnight_training(model_class, model_path, hours=8, versions=20, timesteps_per_version=20000):
     """Run extended overnight training with human-like techniques"""
+    import time
+    
     print(f"Starting overnight training for approximately {hours} hours")
     
     # Create environment
@@ -106,32 +108,47 @@ def overnight_training(model_class, model_path, hours=8, versions=20, timesteps_
     start_time = time.time()
     end_time = start_time + (hours * 3600)  # Convert hours to seconds
     
+    # First, check if we need to create the initial model (v1)
+    if not os.path.exists(f"{model_path}/v1.zip"):
+        print("Creating initial model (v1)...")
+        initial_model = model_class("MlpPolicy", trainer.env, verbose=1, buffer_size=50000)
+        initial_model.save(f"{model_path}/v1")
+        print(f"Created and saved initial model to {model_path}/v1.zip")
+        trainer.current_version = 1
+    else:
+        # Find the highest version number
+        existing_models = [f for f in os.listdir(model_path) if f.startswith('v') and f.endswith('.zip')]
+        if existing_models:
+            version_numbers = [int(f.strip('v').strip('.zip')) for f in existing_models]
+            trainer.current_version = max(version_numbers)
+            print(f"Found existing models, latest is v{trainer.current_version}")
+    
     # Train for specified number of versions or until time runs out
-    for version in range(versions):
+    for version in range(trainer.current_version, trainer.current_version + versions):
         current_time = time.time()
         if current_time >= end_time:
-            print(f"Training time limit of {hours} hours reached after {version} versions")
+            print(f"Training time limit of {hours} hours reached after {version - trainer.current_version} versions")
             break
             
         # Calculate remaining time
         time_elapsed = (current_time - start_time) / 3600  # in hours
         time_remaining = hours - time_elapsed
         
-        print(f"Starting version {version+1}/{versions}")
+        print(f"Starting version {version + 1}")
         print(f"Time elapsed: {time_elapsed:.2f} hours, remaining: {time_remaining:.2f} hours")
         
         # Train this version with human-like learning
         try:
             # Reduce timesteps if we're running out of time
-            if time_remaining < 1 and versions - version > 1:
-                adjusted_timesteps = int(timesteps_per_version * (time_remaining / (versions - version)))
+            if time_remaining < 1 and (versions - (version - trainer.current_version)) > 1:
+                adjusted_timesteps = int(timesteps_per_version * (time_remaining / (versions - (version - trainer.current_version))))
                 print(f"Time running low, reducing timesteps to {adjusted_timesteps}")
                 trainer.train_human_like(timesteps=adjusted_timesteps, versions=1)
             else:
                 trainer.train_human_like(timesteps=timesteps_per_version, versions=1)
                 
         except Exception as e:
-            print(f"Error during training version {version+1}: {e}")
+            print(f"Error during training version {version + 1}: {e}")
             continue
     
     # Calculate and print final stats
@@ -144,9 +161,13 @@ def overnight_training(model_class, model_path, hours=8, versions=20, timesteps_
     else:
         standard_path = "models/pg/ppo_chess"
     
-    final_model = model_class.load(f"{model_path}/v{trainer.current_version}.zip")
-    final_model.save(standard_path)
-    print(f"Saved final model to standard path: {standard_path}")
+    if trainer.current_version > 0:
+        try:
+            final_model = model_class.load(f"{model_path}/v{trainer.current_version}.zip")
+            final_model.save(standard_path)
+            print(f"Saved final model to standard path: {standard_path}")
+        except Exception as e:
+            print(f"Error saving final model to standard path: {e}")
 
 def main():
     args = parse_args()
@@ -155,19 +176,18 @@ def main():
     model_class = DQN if args.model_type == 'dqn' else PPO
     model_type_name = args.model_type.upper()
     
-    # Set up paths for the model - following the original file structure
+    # Set up paths for the model - CHANGED: using standard paths directly
     if args.model_type == 'dqn':
         model_dir = "models/dqn"
-        human_like_path = "models/dqn/human_like"
+        model_path = "models/dqn"  # Direct path without human_like subfolder
         standard_path = "models/dqn/chess_dqn"
     else:
         model_dir = "models/pg"
-        human_like_path = "models/pg/human_like"
+        model_path = "models/pg"  # Direct path without human_like subfolder
         standard_path = "models/pg/ppo_chess"
     
     # Make sure model directories exist
     os.makedirs(model_dir, exist_ok=True)
-    os.makedirs(human_like_path, exist_ok=True)
     os.makedirs("videos", exist_ok=True)
     
     # Training with human-like techniques
@@ -176,7 +196,7 @@ def main():
             # Extended overnight training
             overnight_training(
                 model_class=model_class,
-                model_path=human_like_path,
+                model_path=model_path,  # Changed from human_like_path
                 hours=args.hours,
                 versions=args.versions,
                 timesteps_per_version=args.timesteps
@@ -187,14 +207,14 @@ def main():
             # Create the base environment
             env = ChessEnv()
             
-            # Use the human-like training method
-            trainer = ChessSelfPlayTrainer(env, model_class=model_class, model_path=human_like_path)
+            # Use the human-like training method with direct path
+            trainer = ChessSelfPlayTrainer(env, model_class=model_class, model_path=model_path)
             trainer.train_human_like(timesteps=args.timesteps, versions=args.versions)
             
             # Save a final copy to the standard path for compatibility
-            final_model = model_class.load(f"{human_like_path}/v{trainer.current_version}.zip")
+            final_model = model_class.load(f"{model_path}/v{trainer.current_version}.zip")
             final_model.save(standard_path)
-            print(f"Saved final human-like {model_type_name} model to standard path: {standard_path}")
+            print(f"Saved final model to standard path: {standard_path}")
     
     # Playing or recording
     if args.play or args.record:
