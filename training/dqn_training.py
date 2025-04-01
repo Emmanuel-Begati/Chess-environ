@@ -1,13 +1,23 @@
-import gym
+import os
+import sys
 import numpy as np
+
+# Add the project root to the Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from stable_baselines3 import DQN
-from stable_baselines3.common.envs import DummyVecEnv
-from environment.custom_env import ChessEnv  # Assuming custom_env.py is in the environment folder
+from stable_baselines3.common.vec_env import DummyVecEnv  # Correct import
+from stable_baselines3.common.evaluation import evaluate_policy
+from environment.custom_env import ChessEnv
+
+# Wrapper to make old gym env compatible with stable-baselines3
+def make_env():
+    env = ChessEnv()
+    return env
 
 def train_dqn():
     # Create the environment
-    env = ChessEnv()
-    env = DummyVecEnv([lambda: env])  # Wrap the environment
+    env = DummyVecEnv([make_env])  # Wrap the environment
 
     # Define hyperparameters
     learning_rate = 1e-4

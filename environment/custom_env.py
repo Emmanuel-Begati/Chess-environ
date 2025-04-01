@@ -1,4 +1,4 @@
-import gym
+import gymnasium as gym  # Change this from 'import gym'
 import numpy as np
 import chess
 import chess.engine
@@ -10,19 +10,20 @@ class ChessEnv(gym.Env):
         self.action_space = gym.spaces.Discrete(4672)  # Number of possible moves in chess
         self.observation_space = gym.spaces.Box(low=0, high=1, shape=(8, 8, 12), dtype=np.float32)
 
-    def reset(self):
+    def reset(self, seed=None, options=None):
+        super().reset(seed=seed)
         self.board.reset()
-        return self._get_obs()
+        return self._get_obs(), {}  # Return observation and empty info dict
 
     def step(self, action):
         move = self._action_to_move(action)
         if move not in self.board.legal_moves:
-            return self._get_obs(), -10, True, {}  # Invalid move penalty
+            return self._get_obs(), -10, True, False, {}  # Added False for truncated
 
         self.board.push(move)
         reward = self._get_reward()
         done = self.board.is_game_over()
-        return self._get_obs(), reward, done, {}
+        return self._get_obs(), reward, done, False, {}  # Added False for truncated
 
     def _get_obs(self):
         # Convert the board to a 3D numpy array representation

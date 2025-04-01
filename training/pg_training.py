@@ -1,6 +1,12 @@
 import gym
+import os
+import sys
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
+
+# Add the project root to the Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from environment.custom_env import ChessEnv
 
 def train_ppo():
