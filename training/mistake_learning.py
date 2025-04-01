@@ -186,6 +186,10 @@ class ChessMistakeTracker:
         # Simplified scoring
         score = knights_developed + bishops_developed + (2 if castled else 0)
         return score >= 3  # At least 3 development actions for good opening
+    
+    def _poor_endgame_technique(self, board):
+        """Simplified check for poor endgame technique"""
+        return False  # Placeholder implementation
 
     def _state_to_board(self, state):
         """Convert NN input state back to chess board (approximate)."""
@@ -288,10 +292,7 @@ class ChessMistakeTracker:
 
 class ChessSelfPlayTrainer:
     """
-    Implements self-play training for chess reinforcement learning.
-    
-    The agent plays against versions of itself to learn from its own mistakes
-    and continuously improve its playing strength.
+    Implements self-play training for chess reinforcement learning with human-like behavior.
     """
     
     def __init__(self, env, model_class=DQN, model_path="models", version_history=5):
@@ -314,49 +315,6 @@ class ChessSelfPlayTrainer:
         # Ensure model directory exists
         os.makedirs(model_path, exist_ok=True)
     
-    def train(self, timesteps=10000, versions=5):
-        """Train the model through multiple versions of self-play."""
-        for version in range(versions):
-            print(f"Training version {version + 1}/{versions}")
-            
-            # Load or create model
-            if version == 0:
-                # Initialize a new model for first version
-                model = self.model_class("MlpPolicy", self.env, verbose=1, buffer_size=50000)  # Reduced buffer size
-            else:
-                try:
-                    # Load previous version
-                    model_path = f"{self.model_path}/v{version}.zip"
-                    print(f"Loading model from {model_path}")
-                    model = self.model_class.load(model_path)
-                    model.set_env(self.env)  # Make sure the environment is set
-                except Exception as e:
-                    print(f"Error loading model: {e}")
-                    print("Creating a new model instead")
-                    model = self.model_class("MlpPolicy", self.env, verbose=1, buffer_size=50000)
-            
-            # Train against previous versions (if available)
-            try:
-                self._train_against_previous_versions(model, version, timesteps)
-            except Exception as e:
-                print(f"Error in training against previous versions: {e}")
-            
-            # Save the new version
-            save_path = f"{self.model_path}/v{version + 1}"
-            print(f"Saving model to {save_path}")
-            model.save(save_path)
-            
-            # Update current version
-            self.current_version = version + 1
-            
-            # Evaluate against previous version
-            if version > 0:
-                try:
-                    self._evaluate_progress(f"{self.model_path}/v{version + 1}.zip", 
-                                         f"{self.model_path}/v{version}.zip")
-                except Exception as e:
-                    print(f"Error in evaluation: {e}")
-    
     def train_human_like(self, timesteps=10000, versions=5):
         """
         Train the model to play more like a human by focusing on:
@@ -373,6 +331,7 @@ class ChessSelfPlayTrainer:
             model = self.model_class("MlpPolicy", self.env, verbose=1, buffer_size=50000)
             model.save(f"{self.model_path}/v1")
             print("Created initial model")
+            self.current_version = 1
         
         for version in range(1, versions + 1):
             print(f"Training version {version}/{versions}")
@@ -394,6 +353,7 @@ class ChessSelfPlayTrainer:
             next_version = version + 1
             model.save(f"{self.model_path}/v{next_version}")
             print(f"Saved model version {next_version}")
+            self.current_version = next_version
             
             # Evaluate against previous version
             if version > 1:
@@ -473,11 +433,12 @@ class ChessSelfPlayTrainer:
             
             # Convert to environment state
             self.env.reset()
-            self.env.board = state
+            self.env.envs[0].board = state  # Access the unwrapped environment
             
             # Get current prediction
-            obs = self.env._get_obs()
-            current_action, _ = model.predict(obs, deterministic=True)
+            obs = self.env.envs[0]._get_obs()  # Access the unwrapped environment
+            current_action, _ = model.predict(obs.reshape(1, *obs.shape), deterministic=True)
+            current_action = current_action[0]
             
             # If the model's action differs from correct action, train on this example
             if current_action != correct_action:
@@ -485,12 +446,12 @@ class ChessSelfPlayTrainer:
                 if hasattr(model, 'replay_buffer'):
                     # Simulate taking the wrong action and show the negative outcome
                     test_board = state.copy()
-                    wrong_move = self.env._action_to_move(current_action)
+                    wrong_move = self.env.envs[0]._action_to_move(current_action)
                     test_board.push(wrong_move)
                     
                     # Now simulate taking the correct action
                     right_board = state.copy()
-                    right_move = self.env._action_to_move(correct_action)
+                    right_move = self.env.envs[0]._action_to_move(correct_action)
                     right_board.push(right_move)
                     
                     # Compare outcomes to get reward signal
@@ -557,10 +518,14 @@ class ChessSelfPlayTrainer:
         board.push_san("Nf3")
         board.push_san("Nc6")
         board.push_san("Bc4")  # Position after 3.Bc4
-        # Instead of defending f7, black blunders with d6
-        correct_move = board.parse_san("Nf6")
-        correct_action = list(board.legal_moves).index(correct_move)
-        common_mistakes.append((board.copy(), correct_action))
+        
+        try:
+            # Instead of defending f7, black blunders with d6
+            correct_move = board.parse_san("Nf6")
+            correct_action = list(board.legal_moves).index(correct_move)
+            common_mistakes.append((board.copy(), correct_action))
+        except:
+            pass  # Skip if move parsing fails
         
         # Example: Don't miss a fork
         board = chess.Board()
@@ -569,197 +534,15 @@ class ChessSelfPlayTrainer:
         board.push_san("Nf3")
         board.push_san("Nc6")
         board.push_san("d4")  # Position where white can fork with d4
-        correct_move = board.parse_san("exd4")
-        correct_action = list(board.legal_moves).index(correct_move)
-        common_mistakes.append((board.copy(), correct_action))
         
-        # Add more predefined mistakes as needed
+        try:
+            correct_move = board.parse_san("exd4")
+            correct_action = list(board.legal_moves).index(correct_move)
+            common_mistakes.append((board.copy(), correct_action))
+        except:
+            pass  # Skip if move parsing fails
         
         return common_mistakes
-
-    def _simple_evaluate_position(self, board):
-        """Simple position evaluation for comparing moves"""
-        if board.is_checkmate():
-            return -100 if board.turn else 100
-            
-        material_balance = 0
-        piece_values = {
-            chess.PAWN: 1, chess.KNIGHT: 3, chess.BISHOP: 3,
-            chess.ROOK: 5, chess.QUEEN: 9
-        }
-        
-        for square in chess.SQUARES:
-            piece = board.piece_at(square)
-            if piece and piece.piece_type != chess.KING:
-                value = piece_values[piece.piece_type]
-                material_balance += value if piece.color == chess.WHITE else -value
-        
-        # Convert to perspective of side to move
-        if board.turn == chess.BLACK:
-            material_balance = -material_balance
-            
-        return material_balance
-
-    def _train_against_previous_versions(self, model, current_version, timesteps):
-        """Train the current model against previous versions."""
-        # First, regular training
-        if model.env is None:
-            # If the model's environment is None, set it to the trainer's environment
-            model.set_env(self.env)
-        
-        # Now we can call learn
-        model.learn(total_timesteps=int(timesteps * 0.7))  # 70% of training is standard learning
-        
-        # Then, train against previous versions
-        remaining_timesteps = int(timesteps * 0.3)  # 30% for self-play
-        versions_to_play_against = min(current_version, self.version_history)
-        
-        if versions_to_play_against > 0:
-            timesteps_per_version = remaining_timesteps // versions_to_play_against
-            
-            for v in range(max(0, current_version - self.version_history), current_version):
-                try:
-                    opponent_path = f"{self.model_path}/v{v}.zip"
-                    print(f"Loading opponent model from {opponent_path}")
-                    opponent_model = self.model_class.load(opponent_path)
-                    
-                    # Play games against this version
-                    self._self_play_training(model, opponent_model, timesteps_per_version)
-                except Exception as e:
-                    print(f"Error loading or playing against version {v}: {e}")
-    
-    def _self_play_training(self, model, opponent_model, timesteps):
-        """Train the current model by playing against an opponent model."""
-        # Use learning from mistakes
-        steps_taken = 0
-        while steps_taken < timesteps:
-            obs = self.env.reset()
-            done = False
-            
-            # Track the current game
-            game_states = []
-            game_actions = []
-            game_rewards = []
-            
-            while not done:
-                # Current model makes a move
-                action, _ = model.predict(obs, deterministic=False)
-                next_obs, rewards, dones, infos = self.env.step(action)
-                
-                # Extract values from the vectorized environment (always take index 0)
-                reward = rewards[0]
-                done = dones[0]
-                info = infos[0] if infos else {}
-                
-                # Track this step
-                game_states.append(obs[0])
-                game_actions.append(action[0])
-                game_rewards.append(reward)
-                
-                # Check for mistakes to learn from
-                self.mistake_tracker.add_mistake(obs[0], action[0], next_obs[0], reward, done, info)
-                
-                obs = next_obs
-                steps_taken += 1
-                
-                # If game not over, opponent model makes a move
-                if not done:
-                    # The environment handles the opponent move through step
-                    pass
-            
-            # After game ends, learn from this game
-            self._learn_from_game(model, game_states, game_actions, game_rewards)
-    
-    def _learn_from_game(self, model, states, actions, rewards):
-        """Learn from a completed game, focusing on mistakes."""
-        # For DQN, we'd add these experiences to the replay buffer
-        # For PPO, we'd use this to update the policy
-        
-        # Example for DQN (if applicable):
-        if isinstance(model, DQN) and hasattr(model, 'replay_buffer'):
-            # Calculate returns (for simplicity, using raw rewards)
-            returns = rewards
-            
-            # Add all experiences to replay buffer
-            for i in range(len(states)):
-                model.replay_buffer.add(
-                    states[i],
-                    actions[i],
-                    returns[i],
-                    states[i+1] if i+1 < len(states) else states[i],
-                    done=(i+1 == len(states))
-                )
-    
-    def _evaluate_progress(self, new_model_path, old_model_path, num_games=20):
-        """Evaluate progress by comparing new model against old one."""
-        new_model = self.model_class.load(new_model_path)
-        old_model = self.model_class.load(old_model_path)
-        
-        wins = 0
-        draws = 0
-        losses = 0
-        
-        for game in range(num_games):
-            # Play as white
-            if game < num_games // 2:
-                outcome = self._play_game(new_model, old_model)
-            # Play as black
-            else:
-                outcome = self._play_game(old_model, new_model)
-                # Invert outcome for the new model
-                if outcome == 1:
-                    outcome = -1
-                elif outcome == -1:
-                    outcome = 1
-            
-            if outcome == 1:
-                wins += 1
-            elif outcome == 0:
-                draws += 1
-            else:
-                losses += 1
-        
-        print(f"Evaluation results against previous version:")
-        print(f"Wins: {wins}, Draws: {draws}, Losses: {losses}")
-        print(f"Win rate: {wins/num_games:.2%}")
-    
-    def _play_game(self, white_model, black_model):
-        """Play a game between two models and return the outcome."""
-        obs = self.env.reset()
-        done = False
-        
-        # Track which model is playing as white
-        white_turn = True
-        
-        while not done:
-            # Select model based on current turn
-            model = white_model if white_turn else black_model
-            
-            # Get action from model
-            action, _ = model.predict(obs, deterministic=True)
-            
-            # Take action
-            obs, rewards, dones, infos = self.env.step(action)
-            
-            # Get results from the vectorized environment
-            reward = rewards[0]
-            done = dones[0]
-            info = infos[0] if infos else {}
-            
-            # Switch turns
-            white_turn = not white_turn
-        
-        # Determine outcome from white's perspective
-        if 'outcome' in info:
-            if info['outcome'] == 'win':
-                return 1 if white_turn else -1  # White wins if it's black's turn after game ends
-            elif info['outcome'] == 'loss':
-                return -1 if white_turn else 1  # White loses if it's black's turn after game ends
-            elif info['outcome'] == 'draw':
-                return 0
-        
-        # Default to draw if outcome not clear
-        return 0
 
     def _get_board_from_obs(self, obs):
         """
@@ -777,8 +560,7 @@ class ChessSelfPlayTrainer:
         board.clear()
         
         try:
-            # Assuming obs is a flat array or a 3D array with shape (8, 8, 12)
-            # Reshape if it's flat
+            # Reshape if necessary (assuming obs is 8x8x12 or flattened version)
             if len(obs.shape) == 1:
                 # Assuming shape is (8*8*12,)
                 obs_reshaped = obs.reshape(8, 8, 12)
@@ -798,15 +580,13 @@ class ChessSelfPlayTrainer:
                         # Check if this piece exists at this position (value > 0.5)
                         if obs_reshaped[7-rank, file, piece_idx] > 0.5:
                             piece_color = chess.WHITE if piece_idx < 6 else chess.BLACK
-                            piece_type = piece_types[piece_idx % 6]
+                            piece_type = piece_types[piece_idx]
                             square = chess.square(file, rank)
                             piece_map[square] = chess.Piece(piece_type, piece_color)
             
             # Set the piece map on the board
             board.set_piece_map(piece_map)
             
-            # Try to determine whose turn it is (white plays first in a new position)
-            # This is a simplification - ideally your observation would include turn information
             return board
             
         except Exception as e:
@@ -853,3 +633,38 @@ class ChessSelfPlayTrainer:
         normalized_control = (white_control - black_control) / total_control
         
         return normalized_control
+
+    def _simple_evaluate_position(self, board):
+        """
+        Simple position evaluation for comparing moves.
+        
+        Args:
+            board: A chess.Board representing the position
+            
+        Returns:
+            float: An evaluation score where positive favors white and negative favors black
+        """
+        if board.is_checkmate():
+            return -100 if board.turn else 100
+            
+        material_balance = 0
+        piece_values = {
+            chess.PAWN: 1, chess.KNIGHT: 3, chess.BISHOP: 3,
+            chess.ROOK: 5, chess.QUEEN: 9
+        }
+        
+        for square in chess.SQUARES:
+            piece = board.piece_at(square)
+            if piece and piece.piece_type != chess.KING:
+                value = piece_values[piece.piece_type]
+                material_balance += value if piece.color == chess.WHITE else -value
+        
+        # Add a small bonus for center control
+        center_bonus = 0.1 * self._evaluate_center_control(board)
+        material_balance += center_bonus
+        
+        # Convert to perspective of side to move
+        if board.turn == chess.BLACK:
+            material_balance = -material_balance
+            
+        return material_balance

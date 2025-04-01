@@ -1,7 +1,7 @@
 import os
 import argparse
-import numpy as np
 import imageio
+import time
 from stable_baselines3 import DQN, PPO
 from environment.custom_env import ChessEnv
 from training.mistake_learning import ChessSelfPlayTrainer
@@ -28,20 +28,12 @@ def parse_args():
                         help='Number of model versions to train')
     parser.add_argument('--overnight', action='store_true',
                         help='Run extended overnight training session')
+    parser.add_argument('--hours', type=int, default=8,
+                        help='Number of hours to train (for overnight mode)')
     return parser.parse_args()
 
 def record_video(env, model, video_path="videos/chess_gameplay.mp4", num_episodes=1, stockfish=False, stockfish_elo=1500):
-    """
-    Record a video of the agent playing chess
-    
-    Args:
-        env: The chess environment
-        model: The trained model (DQN or PPO)
-        video_path: Path to save the video
-        num_episodes: Number of episodes to record
-        stockfish: Whether to play against Stockfish
-        stockfish_elo: ELO rating for Stockfish
-    """
+    """Record a video of the agent playing chess"""
     os.makedirs(os.path.dirname(video_path), exist_ok=True)
     
     frames = []
@@ -51,7 +43,6 @@ def record_video(env, model, video_path="videos/chess_gameplay.mp4", num_episode
     
     for episode in range(num_episodes):
         print(f"Recording episode {episode+1}/{num_episodes}")
-        # Pass stockfish=True to env.reset() if playing against Stockfish
         obs, _ = env.reset(options={'stockfish': stockfish, 'stockfish_elo': stockfish_elo})
         done = False
         episode_reward = 0
@@ -70,8 +61,6 @@ def record_video(env, model, video_path="videos/chess_gameplay.mp4", num_episode
             episode_reward += reward
             step_count += 1
             
-            # Add debugging information
-            print(f"Step {step_count}, Reward: {reward}, Done: {done}")
             if done:
                 print(f"Game finished! Adding final frame.")
                 # Add the final frame
@@ -89,46 +78,29 @@ def record_video(env, model, video_path="videos/chess_gameplay.mp4", num_episode
                 draws += 1
             else:
                 losses += 1
-        
-        if step_count >= max_steps:
-            print("Maximum steps reached, ending episode")
     
     print(f"Results: {wins} wins, {draws} draws, {losses} losses")
     
     if frames:
         print(f"Saving video with {len(frames)} frames to {video_path}")
-        import imageio
         imageio.mimsave(video_path, frames, fps=3)
         print(f"Video saved to {video_path}")
     else:
         print("Warning: No frames were captured. Check your rendering function.")
-    
-    return wins, draws, losses
 
 def overnight_training(model_class, model_path, hours=8, versions=20, timesteps_per_version=20000):
-    """
-    Run extended overnight training
-    
-    Args:
-        model_class: The model class to use (DQN or PPO)
-        model_path: Path to save models
-        hours: Number of hours to train
-        versions: Maximum number of versions to create
-        timesteps_per_version: Timesteps per version
-    """
-    import time
-    
+    """Run extended overnight training with human-like techniques"""
     print(f"Starting overnight training for approximately {hours} hours")
     
     # Create environment
     env = ChessEnv()
     
-    # Configure with smaller buffer to avoid memory issues
+    # Configure trainer
     trainer = ChessSelfPlayTrainer(
         env=env,
         model_class=model_class,
         model_path=model_path,
-        version_history=5  # Keep last 5 versions for self-play
+        version_history=5
     )
     
     start_time = time.time()
@@ -165,10 +137,13 @@ def overnight_training(model_class, model_path, hours=8, versions=20, timesteps_
     # Calculate and print final stats
     total_time = (time.time() - start_time) / 3600
     print(f"Training completed after {total_time:.2f} hours")
-    print(f"Trained {trainer.current_version} versions")
     
     # Save a final copy to the standard path for compatibility
-    standard_path = model_path.replace("human_like", "chess_dqn" if model_class == DQN else "ppo_chess")
+    if model_class == DQN:
+        standard_path = "models/dqn/chess_dqn"
+    else:
+        standard_path = "models/pg/ppo_chess"
+    
     final_model = model_class.load(f"{model_path}/v{trainer.current_version}.zip")
     final_model.save(standard_path)
     print(f"Saved final model to standard path: {standard_path}")
@@ -180,10 +155,15 @@ def main():
     model_class = DQN if args.model_type == 'dqn' else PPO
     model_type_name = args.model_type.upper()
     
-    # Set up paths for the model
-    model_dir = "models/dqn" if args.model_type == 'dqn' else "models/pg"
-    human_like_path = f"{model_dir}/human_like"
-    standard_path = f"{model_dir}/chess_dqn" if args.model_type == 'dqn' else f"{model_dir}/ppo_chess"
+    # Set up paths for the model - following the original file structure
+    if args.model_type == 'dqn':
+        model_dir = "models/dqn"
+        human_like_path = "models/dqn/human_like"
+        standard_path = "models/dqn/chess_dqn"
+    else:
+        model_dir = "models/pg"
+        human_like_path = "models/pg/human_like"
+        standard_path = "models/pg/ppo_chess"
     
     # Make sure model directories exist
     os.makedirs(model_dir, exist_ok=True)
@@ -197,7 +177,7 @@ def main():
             overnight_training(
                 model_class=model_class,
                 model_path=human_like_path,
-                hours=8,
+                hours=args.hours,
                 versions=args.versions,
                 timesteps_per_version=args.timesteps
             )
@@ -212,19 +192,18 @@ def main():
             trainer.train_human_like(timesteps=args.timesteps, versions=args.versions)
             
             # Save a final copy to the standard path for compatibility
-            final_model = model_class.load(f"{trainer.model_path}/v{trainer.current_version}.zip")
+            final_model = model_class.load(f"{human_like_path}/v{trainer.current_version}.zip")
             final_model.save(standard_path)
             print(f"Saved final human-like {model_type_name} model to standard path: {standard_path}")
     
     # Playing or recording
     if args.play or args.record:
-        # Load the model
-        model_path = standard_path
-        if os.path.exists(model_path + ".zip"):
-            model = model_class.load(model_path)
-            print(f"Loaded {model_type_name} model from {model_path}")
+        # Load the model from the standard path
+        if os.path.exists(standard_path + ".zip"):
+            model = model_class.load(standard_path)
+            print(f"Loaded {model_type_name} model from {standard_path}")
         else:
-            print(f"{model_type_name} model not found at {model_path}")
+            print(f"{model_type_name} model not found at {standard_path}")
             return
         
         # Initialize environment
