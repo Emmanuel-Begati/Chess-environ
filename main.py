@@ -25,6 +25,11 @@ def parse_args():
                         help='Number of episodes to play/record')
     parser.add_argument('--timesteps', type=int, default=100000,
                         help='Number of timesteps to train for')
+    # Hyperparameter optimization
+    parser.add_argument('--optimize', action='store_true',
+                        help='Optimize hyperparameters before training')
+    parser.add_argument('--n_trials', type=int, default=20,
+                        help='Number of trials for hyperparameter optimization')
     # DQN specific hyperparameters
     parser.add_argument('--lr', type=float, default=1e-4,
                         help='Learning rate (default: 0.0001)')
@@ -36,6 +41,11 @@ def parse_args():
                         help='Final exploration epsilon (default: 0.15)')
     parser.add_argument('--batch_size', type=int, default=128,
                         help='Batch size (default: 128)')
+    # PPO specific hyperparameters
+    parser.add_argument('--n_steps', type=int, default=1024,
+                      help='Number of steps per PPO update (default: 1024)')
+    parser.add_argument('--ent_coef', type=float, default=0.03,
+                      help='Entropy coefficient for PPO (default: 0.03)')
     return parser.parse_args()
 
 def record_video(env, model, video_path="videos/chess_gameplay.mp4", num_episodes=1, stockfish=False, stockfish_elo=1200):
@@ -113,19 +123,30 @@ def main():
     if args.train:
         if args.model_type == 'dqn':
             print(f"Training DQN chess model...")
-            # Call the simplified dqn_training module with hyperparameters
+            # Call the DQN training module with optimization option
             train_dqn(
                 total_timesteps=args.timesteps,
                 learning_rate=args.lr,
                 batch_size=args.batch_size,
                 exploration_fraction=args.exp_fraction,
-                exploration_final_eps=args.final_eps
+                exploration_final_eps=args.final_eps,
+                buffer_size=args.buffer_size,
+                optimize=args.optimize,
+                n_trials=args.n_trials
             )
             print(f"DQN training complete. Model saved to {standard_path}")
         else:
             print(f"Training PPO chess model...")
-            # Call the simplified pg_training module
-            train_ppo()
+            # Call the PPO training module with optimization option
+            train_ppo(
+                total_timesteps=args.timesteps,
+                learning_rate=args.lr,
+                n_steps=args.n_steps,
+                batch_size=args.batch_size,
+                ent_coef=args.ent_coef,
+                optimize=args.optimize,
+                n_trials=args.n_trials
+            )
             print(f"PPO training complete. Model saved to {standard_path}")
     
     # Playing or recording
@@ -137,6 +158,16 @@ def main():
         if os.path.exists(standard_path + ".zip"):
             model = model_class.load(standard_path)
             print(f"Loaded {model_type_name} model from {standard_path}")
+            
+            # Load and print hyperparameters if available
+            hyperparams_path = os.path.join(os.path.dirname(standard_path), "hyperparameters.json")
+            if os.path.exists(hyperparams_path):
+                import json
+                with open(hyperparams_path, "r") as f:
+                    hyperparams = json.load(f)
+                print(f"Model trained with the following hyperparameters:")
+                for param, value in hyperparams.items():
+                    print(f"  {param}: {value}")
         else:
             print(f"{model_type_name} model not found at {standard_path}")
             return

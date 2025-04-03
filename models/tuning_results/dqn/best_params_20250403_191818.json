@@ -1,0 +1,14 @@
+{
+    "best_params": {
+        "learning_rate": 0.00020578158886135563,
+        "gamma": 0.9517641006498655,
+        "batch_size": 32,
+        "exploration_fraction": 0.28187412981992854,
+        "exploration_final_eps": 0.21800696652201412,
+        "buffer_size": 100000
+    },
+    "best_value": 161.7809536382556,
+    "timestamp": "20250403_191818",
+    "n_trials": 20,
+    "tuning_file": "models/tuning_results/dqn/tuning_results_20250403_191818.json"
+}

@@ -1,0 +1,277 @@
+{
+    "study_name": "dqn_optimization",
+    "direction": "maximize",
+    "timestamp": "20250403_191818",
+    "best_trial_number": 13,
+    "best_value": 161.7809536382556,
+    "best_params": {
+        "learning_rate": 0.00020578158886135563,
+        "gamma": 0.9517641006498655,
+        "batch_size": 32,
+        "exploration_fraction": 0.28187412981992854,
+        "exploration_final_eps": 0.21800696652201412,
+        "buffer_size": 100000
+    },
+    "trials": [
+        {
+            "number": 0,
+            "value": 14.218261629343033,
+            "params": {
+                "learning_rate": 5.6115164153345e-05,
+                "gamma": 0.9949763592103507,
+                "batch_size": 32,
+                "exploration_fraction": 0.14646688973455957,
+                "exploration_final_eps": 0.2611910822747312,
+                "buffer_size": 500000
+            },
+            "datetime": "2025-04-03T19:18:18.940174"
+        },
+        {
+            "number": 1,
+            "value": 11.440809890627861,
+            "params": {
+                "learning_rate": 0.000462258900102083,
+                "gamma": 0.9212126771567598,
+                "batch_size": 256,
+                "exploration_fraction": 0.4455560149136927,
+                "exploration_final_eps": 0.09445645065743215,
+                "buffer_size": 50000
+            },
+            "datetime": "2025-04-03T19:19:04.387590"
+        },
+        {
+            "number": 2,
+            "value": 22.72003113478422,
+            "params": {
+                "learning_rate": 8.168455894760161e-05,
+                "gamma": 0.978439078543162,
+                "batch_size": 128,
+                "exploration_fraction": 0.5860358815211507,
+                "exploration_final_eps": 0.059451995869314544,
+                "buffer_size": 200000
+            },
+            "datetime": "2025-04-03T19:19:51.172226"
+        },
+        {
+            "number": 3,
+            "value": 16.91923627257347,
+            "params": {
+                "learning_rate": 4.066563313514796e-05,
+                "gamma": 0.9097574441892378,
+                "batch_size": 32,
+                "exploration_fraction": 0.12751081689217472,
+                "exploration_final_eps": 0.2737029166028468,
+                "buffer_size": 100000
+            },
+            "datetime": "2025-04-03T19:20:39.723585"
+        },
+        {
+            "number": 4,
+            "value": 30.574005141854286,
+            "params": {
+                "learning_rate": 0.00012399967836846095,
+                "gamma": 0.9184669601070001,
+                "batch_size": 32,
+                "exploration_fraction": 0.5783199830488681,
+                "exploration_final_eps": 0.2773435281567039,
+                "buffer_size": 500000
+            },
+            "datetime": "2025-04-03T19:21:34.471044"
+        },
+        {
+            "number": 5,
+            "value": 38.01721039414406,
+            "params": {
+                "learning_rate": 5.989003672254293e-05,
+                "gamma": 0.9271077682742123,
+                "batch_size": 32,
+                "exploration_fraction": 0.21273937997981013,
+                "exploration_final_eps": 0.2426371244186715,
+                "buffer_size": 100000
+            },
+            "datetime": "2025-04-03T19:22:25.552434"
+        },
+        {
+            "number": 6,
+            "value": 4.9335875026881695,
+            "params": {
+                "learning_rate": 1.0257563974185649e-05,
+                "gamma": 0.981464596702638,
+                "batch_size": 128,
+                "exploration_fraction": 0.38677258283541815,
+                "exploration_final_eps": 0.04360202726228762,
+                "buffer_size": 50000
+            },
+            "datetime": "2025-04-03T19:23:18.704021"
+        },
+        {
+            "number": 7,
+            "value": 1.063900876790285,
+            "params": {
+                "learning_rate": 4.187594718900626e-05,
+                "gamma": 0.932485813870472,
+                "batch_size": 128,
+                "exploration_fraction": 0.19567539675064138,
+                "exploration_final_eps": 0.21684098829466855,
+                "buffer_size": 200000
+            },
+            "datetime": "2025-04-03T19:24:14.917660"
+        },
+        {
+            "number": 8,
+            "value": 8.667464409663808,
+            "params": {
+                "learning_rate": 0.00011103647313054615,
+                "gamma": 0.9427113477340191,
+                "batch_size": 256,
+                "exploration_fraction": 0.3514847848610614,
+                "exploration_final_eps": 0.1574855004377638,
+                "buffer_size": 50000
+            },
+            "datetime": "2025-04-03T19:25:03.979853"
+        },
+        {
+            "number": 9,
+            "value": 38.01721039414406,
+            "params": {
+                "learning_rate": 2.8681134821030064e-05,
+                "gamma": 0.9076902929918964,
+                "batch_size": 128,
+                "exploration_fraction": 0.6067230052083388,
+                "exploration_final_eps": 0.2627235711544381,
+                "buffer_size": 200000
+            },
+            "datetime": "2025-04-03T19:25:56.971047"
+        },
+        {
+            "number": 10,
+            "value": 7.521572098135948,
+            "params": {
+                "learning_rate": 0.0003584876937223997,
+                "gamma": 0.96050631835892,
+                "batch_size": 64,
+                "exploration_fraction": 0.8458322735294297,
+                "exploration_final_eps": 0.17402779629760692,
+                "buffer_size": 100000
+            },
+            "datetime": "2025-04-03T19:26:53.854822"
+        },
+        {
+            "number": 11,
+            "value": 27.521100068464875,
+            "params": {
+                "learning_rate": 1.684562012075723e-05,
+                "gamma": 0.9017034956552155,
+                "batch_size": 64,
+                "exploration_fraction": 0.7418674604711404,
+                "exploration_final_eps": 0.21833031082110815,
+                "buffer_size": 200000
+            },
+            "datetime": "2025-04-03T19:27:45.207461"
+        },
+        {
+            "number": 12,
+            "value": 56.1693220436573,
+            "params": {
+                "learning_rate": 2.4255479178765068e-05,
+                "gamma": 0.9291946227036485,
+                "batch_size": 32,
+                "exploration_fraction": 0.703717287817962,
+                "exploration_final_eps": 0.21006822277141063,
+                "buffer_size": 100000
+            },
+            "datetime": "2025-04-03T19:28:25.788752"
+        },
+        {
+            "number": 13,
+            "value": 161.7809536382556,
+            "params": {
+                "learning_rate": 0.00020578158886135563,
+                "gamma": 0.9517641006498655,
+                "batch_size": 32,
+                "exploration_fraction": 0.28187412981992854,
+                "exploration_final_eps": 0.21800696652201412,
+                "buffer_size": 100000
+            },
+            "datetime": "2025-04-03T19:29:08.543100"
+        },
+        {
+            "number": 14,
+            "value": 13.546168684959412,
+            "params": {
+                "learning_rate": 0.00022740236564099142,
+                "gamma": 0.9563600749790533,
+                "batch_size": 32,
+                "exploration_fraction": 0.7583272588004591,
+                "exploration_final_eps": 0.188472933674475,
+                "buffer_size": 100000
+            },
+            "datetime": "2025-04-03T19:29:53.772814"
+        },
+        {
+            "number": 15,
+            "value": 14.754010885953903,
+            "params": {
+                "learning_rate": 0.0009970682275036447,
+                "gamma": 0.9424452161136203,
+                "batch_size": 32,
+                "exploration_fraction": 0.29324394638427165,
+                "exploration_final_eps": 0.11975014975890366,
+                "buffer_size": 100000
+            },
+            "datetime": "2025-04-03T19:30:35.476980"
+        },
+        {
+            "number": 16,
+            "value": 55.911347672343254,
+            "params": {
+                "learning_rate": 0.00017755729469233033,
+                "gamma": 0.9665164569379149,
+                "batch_size": 32,
+                "exploration_fraction": 0.6904786737009859,
+                "exploration_final_eps": 0.299507273397242,
+                "buffer_size": 100000
+            },
+            "datetime": "2025-04-03T19:31:20.824372"
+        },
+        {
+            "number": 17,
+            "value": -3.2428646087646484,
+            "params": {
+                "learning_rate": 1.613810815133555e-05,
+                "gamma": 0.9399580718684332,
+                "batch_size": 32,
+                "exploration_fraction": 0.8848822599889425,
+                "exploration_final_eps": 0.12588372615044607,
+                "buffer_size": 100000
+            },
+            "datetime": "2025-04-03T19:32:03.338984"
+        },
+        {
+            "number": 18,
+            "value": 4.490413181483746,
+            "params": {
+                "learning_rate": 0.0007501054462493084,
+                "gamma": 0.9521480406191108,
+                "batch_size": 256,
+                "exploration_fraction": 0.49410683359659413,
+                "exploration_final_eps": 0.20445809135541704,
+                "buffer_size": 100000
+            },
+            "datetime": "2025-04-03T19:32:46.062429"
+        },
+        {
+            "number": 19,
+            "value": 10.202338635921478,
+            "params": {
+                "learning_rate": 0.00025815325463280817,
+                "gamma": 0.9315491516878696,
+                "batch_size": 64,
+                "exploration_fraction": 0.3191587265500333,
+                "exploration_final_eps": 0.23148674452530732,
+                "buffer_size": 500000
+            },
+            "datetime": "2025-04-03T19:33:31.346109"
+        }
+    ]
+}
