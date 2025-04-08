@@ -61,8 +61,8 @@ These videos illustrate gameplay, showcasing agent decisions, chessboard states,
 
 Chessboard visualization is implemented with OpenGL/PyGame, providing clear visual feedback of game states during agent training and evaluation. Screenshots below are from recorded gameplay videos:
 
-![Chess Visualization](visualization/screenshots/chess_visual_1.png)
-![Chess Visualization](visualization/screenshots/chess_visual_2.png)
+![Chess Visualization](videos/chess_visual_1.png)
+![Chess Visualization](videos/chess_visual_2.png)
 
 ## 🛠️ Installation
 
